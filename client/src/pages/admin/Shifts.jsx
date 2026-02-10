@@ -28,11 +28,15 @@ const Shifts = () => {
         setLoading(true);
         try {
             const payload = {
-                ...values,
+                name: values.name,
                 loginTime: values.loginTime.format('HH:mm'),
-                lunchStart: values.lunchStart.format('HH:mm'),
+                lunchStartTime: values.lunchStartTime.format('HH:mm'),
                 logoutTime: values.logoutTime.format('HH:mm'),
+                graceTime: values.graceTime,
+                lunchDuration: values.lunchDuration,
             };
+
+            console.log('Shift payload:', payload);
 
             if (editingShift) {
                 await api.put(`/shifts/${editingShift._id}`, payload);
@@ -66,8 +70,9 @@ const Shifts = () => {
         if (shift) {
             form.setFieldsValue({
                 ...shift,
+                // Backend stores in 24-hour format, parse it correctly
                 loginTime: dayjs(shift.loginTime, 'HH:mm'),
-                lunchStart: dayjs(shift.lunchStart, 'HH:mm'),
+                lunchStartTime: dayjs(shift.lunchStartTime, 'HH:mm'),
                 logoutTime: dayjs(shift.logoutTime, 'HH:mm'),
             });
         } else {
@@ -78,11 +83,38 @@ const Shifts = () => {
 
     const columns = [
         { title: 'Shift Name', dataIndex: 'name', key: 'name' },
-        { title: 'Login Time', dataIndex: 'loginTime', key: 'loginTime' },
-        { title: 'Logout Time', dataIndex: 'logoutTime', key: 'logoutTime' },
-        { title: 'Grace Period', dataIndex: 'gracePeriod', key: 'gracePeriod', render: text => `${text} mins` },
-        { title: 'Lunch Start', dataIndex: 'lunchStart', key: 'lunchStart' },
-        { title: 'Max Lunch', dataIndex: 'maxLunchDuration', key: 'maxLunchDuration', render: text => `${text} mins` },
+        {
+            title: 'Login Time',
+            dataIndex: 'loginTime',
+            key: 'loginTime',
+            render: (text) => {
+                if (!text) return '-';
+                const time = dayjs(text, 'HH:mm', true);
+                return time.isValid() ? time.format('hh:mm A') : text;
+            }
+        },
+        {
+            title: 'Logout Time',
+            dataIndex: 'logoutTime',
+            key: 'logoutTime',
+            render: (text) => {
+                if (!text) return '-';
+                const time = dayjs(text, 'HH:mm', true);
+                return time.isValid() ? time.format('hh:mm A') : text;
+            }
+        },
+        { title: 'Grace Period', dataIndex: 'graceTime', key: 'graceTime', render: text => `${text || 0} mins` },
+        {
+            title: 'Lunch Start',
+            dataIndex: 'lunchStartTime',
+            key: 'lunchStartTime',
+            render: (text) => {
+                if (!text) return '-';
+                const time = dayjs(text, 'HH:mm', true);
+                return time.isValid() ? time.format('hh:mm A') : text;
+            }
+        },
+        { title: 'Max Lunch', dataIndex: 'lunchDuration', key: 'lunchDuration', render: text => `${text || 45} mins` },
         {
             title: 'Actions',
             key: 'actions',
@@ -121,24 +153,24 @@ const Shifts = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                         <Form.Item name="loginTime" label="Login Time" rules={[{ required: true }]}>
-                            <TimePicker format="HH:mm" className="w-full" />
+                            <TimePicker format="hh:mm A" use12Hours className="w-full" />
                         </Form.Item>
                         <Form.Item name="logoutTime" label="Logout Time" rules={[{ required: true }]}>
-                            <TimePicker format="HH:mm" className="w-full" />
+                            <TimePicker format="hh:mm A" use12Hours className="w-full" />
                         </Form.Item>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <Form.Item name="gracePeriod" label="Grace Period (mins)" rules={[{ required: true }]}>
-                            <Input type="number" />
+                        <Form.Item name="graceTime" label="Grace Period (mins)" rules={[{ required: true }]} initialValue={15}>
+                            <Input type="number" min={0} />
                         </Form.Item>
-                        <Form.Item name="maxLunchDuration" label="Max Lunch (mins)" rules={[{ required: true }]}>
-                            <Input type="number" />
+                        <Form.Item name="lunchDuration" label="Max Lunch (mins)" rules={[{ required: true }]} initialValue={45}>
+                            <Input type="number" min={30} max={60} />
                         </Form.Item>
                     </div>
 
-                    <Form.Item name="lunchStart" label="Lunch Start Time" rules={[{ required: true }]}>
-                        <TimePicker format="HH:mm" className="w-full" />
+                    <Form.Item name="lunchStartTime" label="Lunch Start Time" rules={[{ required: true }]}>
+                        <TimePicker format="hh:mm A" use12Hours className="w-full" />
                     </Form.Item>
 
                     <Button type="primary" htmlType="submit" loading={loading} className="w-full">

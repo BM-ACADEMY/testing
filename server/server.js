@@ -17,14 +17,16 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || "http://localhost:5173",
+        origin: process.env.CLIENT_URL,
         methods: ["GET", "POST", "PUT", "DELETE"],
     },
 });
 
 app.use(express.json());
 app.use(cors());
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(morgan('dev'));
 
 // Serve static files from uploads directory
@@ -36,8 +38,9 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/shifts', require('./routes/shiftRoutes'));
 app.use('/api/attendance', require('./routes/attendanceRoutes'));
 app.use('/api/profile', require('./routes/profileRoutes'));
-// app.use('/api/leaves', require('./routes/leaveRoutes'));
-// app.use('/api/permissions', require('./routes/permissionRoutes'));
+app.use('/api/leaves', require('./routes/leaveRoutes'));
+app.use('/api/permissions', require('./routes/permissionRoutes'));
+app.use('/api/holidays', require('./routes/holidayRoutes'));
 // app.use('/api/reports', require('./routes/reportRoutes'));
 
 // Socket.io

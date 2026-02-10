@@ -21,7 +21,7 @@ const createShift = asyncHandler(async (req, res) => {
         res.status(403);
         throw new Error('Not authorized');
     }
-    const { name, loginTime, gracePeriod, lunchStart, maxLunchDuration, logoutTime } = req.body;
+    const { name, loginTime, graceTime, lunchStartTime, lunchDuration, logoutTime } = req.body;
 
     if (!name || !loginTime || !logoutTime) {
         res.status(400);
@@ -31,9 +31,9 @@ const createShift = asyncHandler(async (req, res) => {
     const shift = await Shift.create({
         name,
         loginTime,
-        gracePeriod,
-        lunchStart,
-        maxLunchDuration,
+        graceTime,
+        lunchStartTime,
+        lunchDuration,
         logoutTime,
     });
 

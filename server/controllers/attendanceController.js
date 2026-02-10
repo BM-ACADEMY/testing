@@ -1,5 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const Attendance = require('../models/Attendance');
+const User = require('../models/User');
+const { calculateLateMinutes, calculateLunchExceeded } = require('../utils/attendanceUtils');
 
 // @desc    Get attendance logs
 // @route   GET /api/attendance
@@ -25,58 +27,99 @@ const getAttendance = asyncHandler(async (req, res) => {
 // @route   POST /api/attendance/mark
 // @access  Private (Employee)
 const markAttendance = asyncHandler(async (req, res) => {
-    // Logic for marking attendance
-    // ... (This logic likely needs careful implementation based on shift rules)
-    // For now, simple check-in/out logic
-
-    // This is complex logic, previously we might have just stubbed it or implemented partial
-    // Let's ensure minimal working version
     const { type } = req.body; // 'login', 'lunchOut', 'lunchIn', 'logout'
+    const userId = req.user.id;
+
+    // Get User and Shift details
+    const user = await User.findById(userId).populate('shift');
+    if (!user || !user.shift) {
+        res.status(400);
+        throw new Error('User not found or no shift assigned');
+    }
+
+    const shift = user.shift;
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
     let attendance = await Attendance.findOne({
-        user: req.user.id,
+        user: userId,
         date: {
             $gte: startOfDay,
             $lte: endOfDay
         }
     });
 
+    const now = new Date();
+
     if (!attendance) {
+        // --- CHECK IN LOGIC ---
         if (type !== 'login') {
             res.status(400);
             throw new Error('Must login first');
         }
+
+        // Calculate Late Minutes
+        const lateMinutes = calculateLateMinutes(now, shift.loginTime, shift.graceTime);
+        console.log(`[Attendance] Login: ${now.toLocaleTimeString()}, Shift: ${shift.loginTime}, Grace: ${shift.graceTime}, Late: ${lateMinutes}`);
+
         attendance = await Attendance.create({
-            user: req.user.id,
+            user: userId,
             date: startOfDay,
-            loginTime: new Date(),
+            shiftName: shift.name,
+            loginTime: now,
+            lateMinutes: lateMinutes,
             status: 'Present',
-            // We need to calculate Late status here based on Shift
+            totalPermissionMinutes: lateMinutes // Initially just late minutes
         });
     } else {
+        // --- UPDATE EXISTING RECORD ---
         if (type === 'logout') {
-            attendance.logoutTime = new Date();
+            attendance.logoutTime = now;
+            // TODO: Could check for early logout if needed, for now just save
         } else if (type === 'lunchOut') {
-            const now = new Date();
             attendance.lunchOut = now;
-            attendance.lunchOutTime = now; // Also save to legacy field
+            attendance.lunchOutTime = now;
         } else if (type === 'lunchIn') {
-            const now = new Date();
             attendance.lunchIn = now;
-            attendance.lunchInTime = now; // Also save to legacy field
+            attendance.lunchInTime = now;
+
+            // Calculate Lunch Exceeded
+            if (attendance.lunchOut) {
+                const exceeded = calculateLunchExceeded(attendance.lunchOut, now, shift.lunchDuration);
+                attendance.lunchExceededMinutes = exceeded;
+            }
         }
+
+        // Recalculate Total Permissions (Late + Lunch Exceeded + EXISTING short permissions if any)
+        // Note: Short permissions are stored in a separate collection usually,
+        // but for summary we store total in attendance.
+        // We will assume for now we just sum Late + Lunch.
+        // Ideally we query Permission model here too.
+
+        attendance.totalPermissionMinutes =
+            (attendance.lateMinutes || 0) +
+            (attendance.lunchExceededMinutes || 0);
+        // + (approvedShortPermissionMinutes || 0); // Future integration point
+
+        // Check for Half Day Penalty (> 180 mins)
+        if (attendance.totalPermissionMinutes > 180) {
+            attendance.isHalfDay = true;
+            attendance.status = 'Half-Day';
+        }
+
         await attendance.save();
     }
 
-    // Emit socket event
-    const io = req.app.get('socketio');
-    io.emit('attendanceUpdate', attendance);
+    // Populate user info for frontend display before emitting
+    const populatedAttendance = await Attendance.findById(attendance._id).populate('user', 'name emali profileImage');
 
-    res.json(attendance);
+    // Real-time Update via Socket.io
+    const io = req.app.get('socketio');
+    io.emit('attendanceUpdate', populatedAttendance);
+
+    res.json(populatedAttendance);
 });
 
 // @desc    Get today's attendance for current user
@@ -105,8 +148,53 @@ const getTodayAttendance = asyncHandler(async (req, res) => {
     res.json(attendance || {});
 });
 
+// @desc    Get monthly attendance summary
+// @route   GET /api/attendance/summary/:month/:year
+// @access  Private
+const getMonthlySummary = asyncHandler(async (req, res) => {
+    const { month, year } = req.params;
+    const userId = req.user.id; // Or from query if Admin
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    const attendance = await Attendance.find({
+        user: userId,
+        date: { $gte: startDate, $lte: endDate }
+    });
+
+    // Calculate Summary
+    let totalPresents = 0;
+    let totalAbsents = 0;
+    let totalLates = 0;
+    let totalHalfDays = 0;
+    let totalLopDays = 0;
+
+    attendance.forEach(record => {
+        if (record.status === 'Present') totalPresents++;
+        if (record.status === 'Absent') totalAbsents++;
+        if (record.lateMinutes > 0) totalLates++;
+        if (record.status === 'Half-Day' || record.isHalfDay) totalHalfDays++;
+        if (record.lopCount > 0 || record.status === 'On-Leave') totalLopDays += (record.lopDays || 0); // Need to handle lop logic better
+    });
+
+    res.json({
+        month,
+        year,
+        stats: {
+            presents: totalPresents,
+            absents: totalAbsents,
+            lates: totalLates,
+            halfDays: totalHalfDays,
+            lopDays: totalLopDays
+        },
+        records: attendance
+    });
+});
+
 module.exports = {
     getAttendance,
     markAttendance,
-    getTodayAttendance
+    getTodayAttendance,
+    getMonthlySummary
 };

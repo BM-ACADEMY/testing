@@ -15,10 +15,15 @@ const attendanceSchema = new mongoose.Schema({
     // Calculated fields
     lateMinutes: { type: Number, default: 0 },
     lunchExceededMinutes: { type: Number, default: 0 },
-    permissionUsedMinutes: { type: Number, default: 0 },
+    totalPermissionMinutes: { type: Number, default: 0 }, // Late + Lunch + Short Permission
+    isHalfDay: { type: Boolean, default: false },
 
-    status: { type: String, enum: ['Present', 'Absent', 'Half-Day', 'Holiday', 'Weekend'], default: 'Absent' },
-    lopCount: { type: Number, default: 0 }, // 0, 0.5, 1, 2
+    status: {
+        type: String,
+        enum: ['Present', 'Absent', 'Half-Day', 'Holiday', 'Weekend', 'On-Leave'],
+        default: 'Absent'
+    },
+    lopDays: { type: Number, default: 0 }, // 0, 0.5, 1, 2
 }, { timestamps: true });
 
 // Compound index just in case

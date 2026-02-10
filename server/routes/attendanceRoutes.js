@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAttendance, markAttendance, getTodayAttendance } = require('../controllers/attendanceController');
+const { getAttendance, markAttendance, getTodayAttendance, getMonthlySummary } = require('../controllers/attendanceController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.route('/')
@@ -11,5 +11,8 @@ router.route('/today')
 
 router.route('/mark')
     .post(protect, markAttendance);
+
+router.route('/summary/:month/:year')
+    .get(protect, getMonthlySummary);
 
 module.exports = router;

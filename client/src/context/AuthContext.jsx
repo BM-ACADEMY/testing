@@ -17,6 +17,7 @@ export const AuthProvider = ({ children }) => {
             if (token) {
                 try {
                     const { data } = await api.get('/auth/me');
+                    console.log('Auth user data:', data);
                     setUser(data);
                 } catch (error) {
                     console.error(error);
@@ -66,6 +67,7 @@ export const AuthProvider = ({ children }) => {
 
     const value = {
         user,
+        setUser,
         loading,
         login,
         register,

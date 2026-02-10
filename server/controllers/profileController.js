@@ -78,7 +78,8 @@ const uploadProfileImage = asyncHandler(async (req, res) => {
     user.profileImage = req.file.path;
     await user.save();
 
-    res.json({
+    console.log('[Profile] Image uploaded successfully:', user.profileImage);
+    res.status(200).json({
         message: 'Profile image uploaded successfully',
         profileImage: user.profileImage
     });
@@ -110,7 +111,8 @@ const deleteProfileImage = asyncHandler(async (req, res) => {
     user.profileImage = null;
     await user.save();
 
-    res.json({ message: 'Profile image deleted successfully' });
+    console.log('[Profile] Image deleted successfully');
+    res.status(200).json({ message: 'Profile image deleted successfully' });
 });
 
 module.exports = {
