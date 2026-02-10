@@ -1,0 +1,7 @@
+
+// This file is empty because I am not creating a new file, I just want to complete the thinking process.
+// The user asked "the user page to login luch out and luch in and logppt".
+// This functionality is already implemented in EmployeeDashboard.jsx with handleMarkAttendance.
+// The user might be asking to Ensure it works or asking where it is.
+// I have just enabled the timeline on mobile view as well so the user can see their logs.
+// I will verify the functionality works as expected.
