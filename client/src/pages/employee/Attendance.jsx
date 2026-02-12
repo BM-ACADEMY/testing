@@ -60,16 +60,17 @@ const Attendance = () => {
                             <tr className="bg-gray-50/50 border-b border-gray-100 text-xs uppercase text-gray-500 font-semibold tracking-wider">
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4">Check In</th>
-                                <th className="px-6 py-4">Check Out</th>
-                                <th className="px-6 py-4">Late By</th>
-                                <th className="px-6 py-4">Total Permission</th>
+                                <th className="px-6 py-4">Login</th>
+                                <th className="px-6 py-4">Lunch Out</th>
+                                <th className="px-6 py-4">Lunch In</th>
+                                <th className="px-6 py-4">Logout</th>
+                                <th className="px-6 py-4">Total Late Time</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {attendance.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
                                         No attendance records found.
                                     </td>
                                 </tr>
@@ -89,17 +90,20 @@ const Attendance = () => {
                                             {record.loginTime ? dayjs(record.loginTime).format('hh:mm A') : '-'}
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-500 font-mono">
+                                            {record.lunchOut ? dayjs(record.lunchOut).format('hh:mm A') : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">
+                                            {record.lunchIn ? dayjs(record.lunchIn).format('hh:mm A') : '-'}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">
                                             {record.logoutTime ? dayjs(record.logoutTime).format('hh:mm A') : '-'}
                                         </td>
                                         <td className="px-6 py-4 text-sm">
-                                            {record.lateMinutes > 0 ? (
-                                                <span className="text-red-600 font-medium">{formatLateTime(record.lateMinutes)}</span>
+                                            {record.totalPermissionMinutes > 0 ? (
+                                                <span className="text-red-600 font-medium">{formatDuration(record.totalPermissionMinutes)}</span>
                                             ) : (
                                                 <span className="text-gray-400">-</span>
                                             )}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">
-                                            {record.totalPermissionMinutes > 0 ? formatDuration(record.totalPermissionMinutes) : '-'}
                                         </td>
                                     </tr>
                                 ))

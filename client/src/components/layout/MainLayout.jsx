@@ -52,8 +52,9 @@ const MainLayout = () => {
             items.push(
                 { key: 'requests', icon: <CheckSquare size={20} />, label: 'Requests', path: '/ceo/requests' },
                 { key: 'hrs', icon: <Users size={20} />, label: 'Manage HRs', path: '/ceo/hrs' },
-                { key: 'holidays', icon: <Calendar size={20} />, label: 'Holidays', path: '/hr/holidays' },
-                { key: 'attendance', icon: <FileText size={20} />, label: 'Attendance', path: '/hr/attendance' },
+                { key: 'shifts', icon: <Calendar size={20} />, label: 'Shifts', path: '/ceo/shifts' },
+                { key: 'holidays', icon: <Calendar size={20} />, label: 'Holidays', path: '/ceo/holidays' },
+                { key: 'attendance', icon: <FileText size={20} />, label: 'Attendance', path: '/ceo/attendance' },
                 { key: 'analytics', icon: <LayoutDashboard size={20} />, label: 'Analytics', path: '/ceo/analytics' },
             );
         } else {

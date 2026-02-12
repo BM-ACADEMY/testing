@@ -14,7 +14,17 @@ const getAttendance = asyncHandler(async (req, res) => {
         query.user = req.user.id;
     }
 
-    // TODO: Add date range filters if in query params
+
+    // Date Range Filtering
+    const { startDate, endDate } = req.query;
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.date = { $gte: start, $lte: end };
+    }
+
 
     const attendance = await Attendance.find(query)
         .populate('user', 'name email shift')
@@ -170,12 +180,17 @@ const getMonthlySummary = asyncHandler(async (req, res) => {
     let totalHalfDays = 0;
     let totalLopDays = 0;
 
+    let totalPermissionMinutes = 0;
+
     attendance.forEach(record => {
         if (record.status === 'Present') totalPresents++;
         if (record.status === 'Absent') totalAbsents++;
         if (record.lateMinutes > 0) totalLates++;
         if (record.status === 'Half-Day' || record.isHalfDay) totalHalfDays++;
-        if (record.lopCount > 0 || record.status === 'On-Leave') totalLopDays += (record.lopDays || 0); // Need to handle lop logic better
+        if (record.lopCount > 0 || record.status === 'On-Leave') totalLopDays += (record.lopDays || 0);
+
+        // Sum total permissions
+        totalPermissionMinutes += (record.totalPermissionMinutes || 0);
     });
 
     res.json({
@@ -186,7 +201,10 @@ const getMonthlySummary = asyncHandler(async (req, res) => {
             absents: totalAbsents,
             lates: totalLates,
             halfDays: totalHalfDays,
-            lopDays: totalLopDays
+            lates: totalLates,
+            halfDays: totalHalfDays,
+            lopDays: totalLopDays,
+            totalPermissionMinutes // Send to frontend
         },
         records: attendance
     });

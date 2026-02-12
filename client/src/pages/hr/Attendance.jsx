@@ -1,22 +1,40 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../utils/axios';
 import { motion } from 'framer-motion';
-import { Calendar, User, Search, Download } from 'lucide-react';
+import { Calendar as CalendarIcon, User, Search, Download, Filter, X } from 'lucide-react'; // Renamed import to avoid conflict
+import { DatePicker, Space, Dropdown } from 'antd'; // Added Ant Design components
 import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
 import { formatLateTime } from '../../utils/timeFormat';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+
+dayjs.extend(isBetween);
+const { RangePicker } = DatePicker;
 
 const Attendance = () => {
     const [attendance, setAttendance] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [dateRange, setDateRange] = useState(null); // [start, end]
+    const navigate = useNavigate();
 
     useEffect(() => {
         fetchAttendance();
-    }, []);
+    }, [dateRange]); // Refetch when date range changes
 
     const fetchAttendance = async () => {
+        setLoading(true);
         try {
-            const { data } = await api.get('/attendance');
+            let url = '/attendance';
+            if (dateRange) {
+                const start = dateRange[0].format('YYYY-MM-DD');
+                const end = dateRange[1].format('YYYY-MM-DD');
+                url += `?startDate=${start}&endDate=${end}`;
+            }
+            const { data } = await api.get(url);
             setAttendance(data);
         } catch (error) {
             console.error("Error fetching attendance:", error);
@@ -40,6 +58,53 @@ const Attendance = () => {
         );
     };
 
+    // Export to Excel
+    const exportToExcel = () => {
+        const dataToExport = filteredAttendance.map(record => ({
+            'Employee': record.user?.name || 'N/A',
+            'Date': dayjs(record.date).format('DD MMM, YYYY'),
+            'Status': record.status,
+            'Login': record.loginTime ? dayjs(record.loginTime).format('hh:mm A') : '-',
+            'Lunch Out': record.lunchOut ? dayjs(record.lunchOut).format('hh:mm A') : '-',
+            'Lunch In': record.lunchIn ? dayjs(record.lunchIn).format('hh:mm A') : '-',
+            'Logout': record.logoutTime ? dayjs(record.logoutTime).format('hh:mm A') : '-',
+            'Total Late Time (Mins)': (record.lateMinutes || 0) + (record.lunchExceededMinutes || 0)
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+        XLSX.writeFile(wb, "Attendance_Report.xlsx");
+    };
+
+    // Export to PDF
+    const exportToPDF = () => {
+        const doc = new jsPDF();
+        doc.text("Attendance Report", 14, 15);
+
+        const tableColumn = ["Employee", "Date", "Status", "Login", "Lunch Out", "Lunch In", "Logout", "Late Time"];
+        const tableRows = filteredAttendance.map(record => [
+            record.user?.name || 'N/A',
+            dayjs(record.date).format('DD MMM'),
+            record.status,
+            record.loginTime ? dayjs(record.loginTime).format('HH:mm') : '-',
+            record.lunchOut ? dayjs(record.lunchOut).format('HH:mm') : '-',
+            record.lunchIn ? dayjs(record.lunchIn).format('HH:mm') : '-',
+            record.logoutTime ? dayjs(record.logoutTime).format('HH:mm') : '-',
+            `${(record.lateMinutes || 0) + (record.lunchExceededMinutes || 0)}m`
+        ]);
+
+        autoTable(doc, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: 20,
+        });
+
+        doc.save("Attendance_Report.pdf");
+    };
+
+
+
     const filteredAttendance = attendance.filter(record =>
         record.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         record.user?.email?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -57,7 +122,15 @@ const Attendance = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h1 className="text-2xl font-bold text-gray-900">Employee Attendance</h1>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
+                    {/* Date Range Picker */}
+                    <div className="bg-white rounded-lg border border-gray-200">
+                        <RangePicker
+                            onChange={(dates) => setDateRange(dates)}
+                            className="border-none shadow-none"
+                        />
+                    </div>
+
                     <div className="relative">
                         <input
                             type="text"
@@ -68,9 +141,29 @@ const Attendance = () => {
                         />
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-                        <Download size={18} /> Export
-                    </button>
+
+                    {/* Export Dropdown */}
+                    <Dropdown menu={{
+                        items: [
+                            { key: 'excel', label: 'Export to Excel', onClick: exportToExcel },
+                            { key: 'pdf', label: 'Export to PDF', onClick: exportToPDF },
+                        ]
+                    }} placement="bottomRight">
+                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors h-auto">
+                            <Download size={18} /> Export <span className="text-xs">▼</span>
+                        </button>
+                    </Dropdown>
+
+                    {/* Clear Filters (Optional, if dateRange is set) */}
+                    {dateRange && (
+                        <button
+                            onClick={() => setDateRange(null)}
+                            className="p-2 text-gray-500 hover:text-red-500 transition-colors"
+                            title="Clear Date Filter"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -82,53 +175,75 @@ const Attendance = () => {
                                 <th className="px-6 py-4">Employee</th>
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4">Check In</th>
-                                <th className="px-6 py-4">Check Out</th>
-                                <th className="px-6 py-4">Late</th>
+                                <th className="px-6 py-4">Login</th>
+                                <th className="px-6 py-4">Lunch Out</th>
+                                <th className="px-6 py-4">Lunch In</th>
+                                <th className="px-6 py-4">Logout</th>
+                                <th className="px-6 py-4">Total Late Time</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {filteredAttendance.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                                         No attendance records found.
                                     </td>
                                 </tr>
                             ) : (
-                                filteredAttendance.map((record) => (
-                                    <tr key={record._id} className="hover:bg-gray-50/50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                                    {record.user?.name?.charAt(0) || '?'}
+                                filteredAttendance.map((record) => {
+                                    const totalLateTime = (record.lateMinutes || 0) + (record.lunchExceededMinutes || 0);
+
+                                    return (
+                                        <tr key={record._id} className="hover:bg-gray-50/50 transition-colors">
+                                            <td className="px-6 py-4 max-w-[200px]">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                                                        {record.user?.name?.charAt(0) || '?'}
+                                                    </div>
+                                                    <div className="truncate">
+                                                        <p className="text-sm font-medium text-gray-900 truncate" title={record.user?.name}>{record.user?.name}</p>
+                                                        <p className="text-xs text-gray-500 truncate" title={record.user?.email}>{record.user?.email}</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-900">{record.user?.name}</p>
-                                                    <p className="text-xs text-gray-500">{record.user?.email}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">
-                                            {dayjs(record.date).format('MMM DD, YYYY')}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <StatusBadge status={record.status} />
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">
-                                            {record.loginTime ? dayjs(record.loginTime).format('hh:mm A') : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">
-                                            {record.logoutTime ? dayjs(record.logoutTime).format('hh:mm A') : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm">
-                                            {record.lateMinutes > 0 ? (
-                                                <span className="text-red-600 font-medium">{formatLateTime(record.lateMinutes)}</span>
-                                            ) : (
-                                                <span className="text-gray-400">-</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                                                {dayjs(record.date).format('MMM DD, YYYY')}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <StatusBadge status={record.status} />
+                                            </td>
+
+                                            {/* Times - Login */}
+                                            <td className="px-6 py-4 text-sm text-gray-500 font-mono whitespace-nowrap">
+                                                {record.loginTime ? dayjs(record.loginTime).format('hh:mm A') : '-'}
+                                            </td>
+
+                                            {/* Times - Lunch Out */}
+                                            <td className="px-6 py-4 text-sm text-gray-500 font-mono whitespace-nowrap">
+                                                {record.lunchOut ? dayjs(record.lunchOut).format('hh:mm A') : '-'}
+                                            </td>
+
+                                            {/* Times - Lunch In */}
+                                            <td className="px-6 py-4 text-sm text-gray-500 font-mono whitespace-nowrap">
+                                                {record.lunchIn ? dayjs(record.lunchIn).format('hh:mm A') : '-'}
+                                            </td>
+
+                                            {/* Times - Logout */}
+                                            <td className="px-6 py-4 text-sm text-gray-500 font-mono whitespace-nowrap">
+                                                {record.logoutTime ? dayjs(record.logoutTime).format('hh:mm A') : '-'}
+                                            </td>
+
+                                            {/* Total Late Time */}
+                                            <td className="px-6 py-4 text-sm whitespace-nowrap">
+                                                {totalLateTime > 0 ? (
+                                                    <span className="text-red-600 font-medium">{formatLateTime(totalLateTime)}</span>
+                                                ) : (
+                                                    <span className="text-green-600">On Time</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

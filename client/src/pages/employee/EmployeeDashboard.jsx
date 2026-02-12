@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Clock,
     Coffee,
@@ -14,15 +15,18 @@ import {
 import { motion } from 'framer-motion';
 import api from '../../utils/axios';
 import dayjs from 'dayjs';
+import { formatDuration } from '../../utils/timeFormat';
 import { useAuth } from '../../context/AuthContext';
 import { io } from 'socket.io-client';
-
 import ApplyLeaveModal from '../../components/modals/ApplyLeaveModal';
 import ApplyPermissionModal from '../../components/modals/ApplyPermissionModal';
 
+
 const EmployeeDashboard = () => {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true); // Added to track initial data fetch
     const [attendance, setAttendance] = useState(null);
     const [todayActivity, setTodayActivity] = useState([]);
     const [stats, setStats] = useState({ presents: 0, lates: 0, absents: 0, halfDays: 0, lopDays: 0 });
@@ -82,6 +86,8 @@ const EmployeeDashboard = () => {
             updateTimeline(data);
         } catch (error) {
             console.error("Error fetching attendance", error);
+        } finally {
+            setInitialLoading(false);
         }
     };
 
@@ -119,13 +125,33 @@ const EmployeeDashboard = () => {
         setTodayActivity(items);
     };
 
+    // Valid short beep sound (Base64)
+    // Source: https://www.soundjay.com/buttons/sounds/button-3.mp3 (converted)
+    const playNotificationSound = () => {
+        try {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(e => console.warn('Audio play failed (interaction required?):', e));
+        } catch (e) { console.error('Audio setup failed:', e); }
+    };
+
     useEffect(() => {
         fetchTodayAttendance();
         fetchStats();
         fetchRequests();
 
-        // Socket connection
-        const socket = io(import.meta.env.VITE_API_URL);
+        // Request Notification Permission on mount
+        if ('Notification' in window && Notification.permission !== 'granted') {
+            Notification.requestPermission();
+        }
+    }, [user]);
+
+    // Separate Effect for Socket Connection (Stable)
+    useEffect(() => {
+        const socket = io(import.meta.env.VITE_API_URL, {
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 5,
+        });
 
         socket.on('attendanceUpdate', (updatedAttendance) => {
             if (updatedAttendance.user === user._id || updatedAttendance.user._id === user._id) {
@@ -135,8 +161,63 @@ const EmployeeDashboard = () => {
             }
         });
 
-        return () => socket.disconnect();
-    }, []);
+        return () => {
+            socket.disconnect();
+        };
+    }, [user._id]); // Only re-connect if user ID changes
+
+    // Separate Effect for Reminders (Depends on attendance state)
+    const lastNotificationTime = React.useRef(null);
+
+    useEffect(() => {
+        const checkReminders = () => {
+            if (!user?.shift || initialLoading) return; // Don't notify if user has no shift or data is loading
+
+            const now = dayjs();
+            const formatTime = (t) => dayjs(t, 'HH:mm');
+            const currentMinuteKey = now.format('HH:mm');
+
+            // Throttling: Check if we already notified this minute
+            if (lastNotificationTime.current === currentMinuteKey) return;
+
+            const sendNotification = (title, body) => {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(title, { body, icon: '/vite.svg' });
+                    playNotificationSound();
+                    lastNotificationTime.current = currentMinuteKey; // Mark as notified for this minute
+                }
+            };
+
+            // Check Shift Start (Login)
+            const shiftStart = formatTime(user.shift.loginTime);
+            // Alert if it's the exact minute AND we haven't logged in
+            if (!attendance?.loginTime && now.hour() === shiftStart.hour() && now.minute() === shiftStart.minute()) {
+                sendNotification('Time to Check In!', `Your shift starts at ${user.shift.loginTime}. Please mark your attendance.`);
+            }
+
+            // Check Lunch Start
+            if (user.shift.lunchStartTime) {
+                const lunchStart = formatTime(user.shift.lunchStartTime);
+                if (attendance?.loginTime && !attendance?.lunchOut && now.hour() === lunchStart.hour() && now.minute() === lunchStart.minute()) {
+                    sendNotification('Lunch Time!', 'It\'s time for your lunch break using the system.');
+                }
+            }
+
+            // Check Logout (Shift End)
+            if (user.shift.logoutTime) {
+                const logoutTime = formatTime(user.shift.logoutTime);
+                // Only remind if logged in and NOT logged out yet
+                if (attendance?.loginTime && !attendance?.logoutTime && now.hour() === logoutTime.hour() && now.minute() === logoutTime.minute()) {
+                    sendNotification('Shift Completed!', 'Your shift has ended. Don\'t forget to Check Out.');
+                }
+            }
+        };
+
+        const reminderInterval = setInterval(checkReminders, 60000); // Check every minute
+        checkReminders(); // Initial check
+
+        return () => clearInterval(reminderInterval);
+    }, [user, attendance, initialLoading]); // Re-creates interval when attendance updates, which is fine/needed
 
     const handleMarkAttendance = async (type) => {
         setLoading(true);
@@ -184,6 +265,25 @@ const EmployeeDashboard = () => {
         </div>
     );
 
+    // Helper to check if current time is within shift start time
+    // We only restrict Check In. Logout is always enabled (as per req).
+    const isShiftStarted = () => {
+        if (!user?.shift) return true; // Fallback if no shift assigned
+        // If shift logic is complex (e.g. night shift), detailed parsing needed.
+        // For now, assume simple day comparison HH:mm
+        // Parse current time
+        const now = dayjs();
+        const shiftStart = dayjs(user.shift.loginTime, 'HH:mm');
+
+        // Set shift start to today
+        const shiftStartToday = dayjs().set('hour', shiftStart.hour()).set('minute', shiftStart.minute());
+
+        // Allow login if now >= shiftStart
+        return now.isAfter(shiftStartToday) || now.isSame(shiftStartToday);
+    };
+
+    const LinkToAnalytics = () => navigate('/employee/permissions/analytics');
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -191,7 +291,7 @@ const EmployeeDashboard = () => {
             transition={{ duration: 0.4 }}
             className="space-y-6 max-w-7xl mx-auto"
         >
-            {/* Header */}
+            {/* ... Header ... */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Good Morning, {user?.name} 👋</h1>
@@ -216,13 +316,15 @@ const EmployeeDashboard = () => {
                             bgClass="bg-emerald-50"
                             colorClass="text-emerald-600"
                         />
-                        <StatsCard
-                            title="Lates"
-                            value={stats.lates}
-                            icon={<Clock size={24} />}
-                            bgClass="bg-amber-50"
-                            colorClass="text-amber-600"
-                        />
+                        <div onClick={LinkToAnalytics} className="cursor-pointer">
+                            <StatsCard
+                                title="Lates"
+                                value={stats.lates}
+                                icon={<Clock size={24} />}
+                                bgClass="bg-amber-50"
+                                colorClass="text-amber-600"
+                            />
+                        </div>
                         <StatsCard
                             title="Half Days"
                             value={stats.halfDays}
@@ -230,13 +332,37 @@ const EmployeeDashboard = () => {
                             bgClass="bg-violet-50"
                             colorClass="text-violet-600"
                         />
-                        <StatsCard
-                            title="LOP Days"
-                            value={stats.lopDays}
-                            icon={<AlertCircle size={24} />}
-                            bgClass="bg-rose-50"
-                            colorClass="text-rose-600"
-                        />
+                        <div onClick={LinkToAnalytics} className="cursor-pointer">
+                            <StatsCard
+                                title="LOP Days"
+                                value={stats.lopDays}
+                                icon={<AlertCircle size={24} />}
+                                bgClass="bg-rose-50"
+                                colorClass="text-rose-600"
+                            />
+                        </div>
+
+                        {/* New Permission Time Card */}
+                        <div onClick={LinkToAnalytics} className="cursor-pointer md:col-span-4 lg:col-span-4">
+                            <div className="p-4 rounded-2xl border border-red-100 shadow-sm hover:shadow-md transition-shadow bg-red-50 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 rounded-full bg-white text-red-600">
+                                        <Clock size={24} />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-medium text-red-600 uppercase tracking-wide">Total Permission Used</p>
+                                        <h3 className="text-2xl font-bold text-gray-900 mt-1">
+                                            {formatDuration(stats.totalPermissionMinutes || 0)}
+                                        </h3>
+                                    </div>
+                                </div>
+                                <div className="hidden sm:block">
+                                    <button className="text-xs font-bold text-red-600 bg-white px-3 py-1.5 rounded-lg border border-red-100 shadow-sm">
+                                        View Details
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Timeline Section */}
@@ -287,8 +413,8 @@ const EmployeeDashboard = () => {
                                         </div>
                                     </div>
                                     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${req.status === 'Pending' ? 'bg-orange-100 text-orange-700' :
-                                            req.status === 'Approved' ? 'bg-green-100 text-green-700' :
-                                                'bg-red-100 text-red-700'
+                                        req.status === 'Approved' ? 'bg-green-100 text-green-700' :
+                                            'bg-red-100 text-red-700'
                                         }`}>
                                         {req.status}
                                     </span>
@@ -327,9 +453,14 @@ const EmployeeDashboard = () => {
                                     {!attendance?.loginTime && (
                                         <button
                                             onClick={() => handleMarkAttendance('checkIn')}
-                                            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-lg shadow-blue-200 shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                                            disabled={!isShiftStarted()}
+                                            className={`w-full py-3.5 rounded-xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-2 ${isShiftStarted()
+                                                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-95'
+                                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                }`}
                                         >
-                                            <Clock size={20} /> Check In
+                                            <Clock size={20} />
+                                            {isShiftStarted() ? 'Check In' : `Check In starts at ${user?.shift?.loginTime || 'Unknown'}`}
                                         </button>
                                     )}
 

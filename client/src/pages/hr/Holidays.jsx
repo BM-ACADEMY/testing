@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const Holidays = () => {
     const { user } = useAuth();
-    const isHR = user?.role === 'HR';
+    const isAdmin = user?.role === 'HR' || user?.role === 'CEO'; // Allow both HR and CEO
 
     const [holidays, setHolidays] = useState([]);
     const [selectedDate, setSelectedDate] = useState(null);
@@ -59,8 +59,8 @@ const Holidays = () => {
     };
 
     const onDateSelect = (date) => {
-        // Only HR can add/edit holidays
-        if (!isHR) return;
+        // Only Admin (HR/CEO) can add/edit holidays
+        if (!isAdmin) return;
 
         const dateString = date.format('YYYY-MM-DD');
         const existingHoliday = holidays.find(h =>
@@ -153,7 +153,7 @@ const Holidays = () => {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Company Holidays</h1>
                     <p className="text-gray-500 mt-1">
-                        {isHR ? 'Manage company-wide holidays and events' : 'View company holidays and events'}
+                        {isAdmin ? 'Manage company-wide holidays and events' : 'View company holidays and events'}
                     </p>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">

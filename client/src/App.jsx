@@ -18,6 +18,7 @@ import Holidays from './pages/hr/Holidays';
 import Reports from './pages/admin/Reports';
 import Profile from './pages/common/Profile';
 import Requests from './pages/common/Requests';
+import PermissionAnalytics from './pages/common/PermissionAnalytics';
 import { Loader2 } from 'lucide-react';
 
 const LoadingSpinner = () => (
@@ -74,6 +75,7 @@ const App = () => {
             <Route path="employees" element={<Employees />} />
             <Route path="shifts" element={<Shifts />} />
             <Route path="attendance" element={<HRAttendance />} />
+            <Route path="employee/:userId/analytics" element={<PermissionAnalytics />} />
             <Route path="requests" element={<Requests />} />
             <Route path="holidays" element={<Holidays />} />
             <Route path="reports" element={<Reports />} />
@@ -89,6 +91,7 @@ const App = () => {
           }>
             <Route path="dashboard" element={<EmployeeDashboard />} />
             <Route path="attendance" element={<EmployeeAttendance />} />
+            <Route path="permissions/analytics" element={<PermissionAnalytics />} />
             <Route path="leaves" element={<Leaves />} />
             <Route path="holidays" element={<EmployeeHolidays />} />
             <Route path="profile" element={<Profile />} />
@@ -103,8 +106,11 @@ const App = () => {
           }>
             <Route path="dashboard" element={<CEODashboard />} />
             <Route path="analytics" element={<CEODashboard />} />
+            <Route path="shifts" element={<Shifts />} />
             <Route path="attendance" element={<HRAttendance />} />
+            <Route path="employee/:userId/analytics" element={<PermissionAnalytics />} />
             <Route path="requests" element={<Requests />} />
+            <Route path="holidays" element={<Holidays />} />
             <Route path="reports" element={<div>Reports (Coming Soon)</div>} />
             <Route path="hrs" element={<HRs />} />
             <Route path="profile" element={<Profile />} />

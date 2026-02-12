@@ -47,6 +47,7 @@ const registerUser = asyncHandler(async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            shift: user.shift,
             profileImage: user.profileImage,
             token: generateToken(user._id),
         });
@@ -63,7 +64,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
     // Check for user email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate('shift');
 
     if (user && (await bcrypt.compare(password, user.password))) {
         res.json({
@@ -71,6 +72,7 @@ const loginUser = asyncHandler(async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
+            shift: user.shift, // Send full shift object
             profileImage: user.profileImage,
             token: generateToken(user._id),
         });
@@ -84,15 +86,25 @@ const loginUser = asyncHandler(async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 const getMe = asyncHandler(async (req, res) => {
-    const user = {
-        id: req.user._id,
-        name: req.user.name,
-        email: req.user.email,
-        role: req.user.role,
-        profileImage: req.user.profileImage,
+    // We must fetch from DB to populate shift, as req.user from middleware
+    // might not have deep population (only top level fields usually).
+    const user = await User.findById(req.user._id).populate('shift');
+
+    if (!user) {
+        res.status(404);
+        throw new Error('User not found');
+    }
+
+    const userData = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        shift: user.shift,
+        profileImage: user.profileImage,
     };
 
-    res.status(200).json(user);
+    res.status(200).json(userData);
 });
 
 module.exports = {
