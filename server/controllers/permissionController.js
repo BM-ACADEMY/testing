@@ -23,6 +23,12 @@ const requestPermission = asyncHandler(async (req, res) => {
         throw new Error('Invalid time duration');
     }
 
+    // Permission Limit: Max 3 Hours (180 Minutes)
+    if (durationMinutes > 180) {
+        res.status(400);
+        throw new Error('Permission cannot exceed 3 hours. Please apply for Half-Day or Leave.');
+    }
+
     const permission = await Permission.create({
         user: req.user.id,
         date,
@@ -68,49 +74,58 @@ const updatePermissionStatus = asyncHandler(async (req, res) => {
     permission.approvedBy = req.user.id;
     await permission.save();
 
-    // If approved, update Attendance for that day if it exists
+    // If approved, update Attendance for that day
     if (status === 'Approved') {
         const startOfDay = new Date(permission.date);
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(permission.date);
         endOfDay.setHours(23, 59, 59, 999);
 
+        // Find or Create Attendance Logic
+        // We need to support cases where user hasn't clocked in yet (Permission before work)
+        // So we use findOneAndUpdate with upsert option suitable for this context.
+        // However, usually permission attaches to existing or creates a skeleton.
+
         let attendance = await Attendance.findOne({
             user: permission.user,
             date: { $gte: startOfDay, $lte: endOfDay }
         });
 
-        if (attendance) {
-            // Recalculate Total Permission
-            // We need to fetch all approved permissions for this day to be accurate,
-            // or just add this one if we assume sequential approval.
-            // Better to re-sum everything to be safe.
-            const allPermissions = await Permission.find({
+        if (!attendance) {
+            // Create a skeleton attendance record if none exists
+            attendance = await Attendance.create({
                 user: permission.user,
-                date: { $gte: startOfDay, $lte: endOfDay },
-                status: 'Approved'
+                date: startOfDay,
+                status: 'Present', // Default to Present if they have permission to be away part time
+                // shiftName could be fetched but let's leave optional or fetch user
+                totalPermissionMinutes: 0
             });
-
-            const totalShortPermission = allPermissions.reduce((acc, curr) => acc + curr.durationMinutes, 0);
-
-            attendance.totalPermissionMinutes =
-                (attendance.lateMinutes || 0) +
-                (attendance.lunchExceededMinutes || 0) +
-                totalShortPermission;
-
-            if (attendance.totalPermissionMinutes > 180) {
-                attendance.isHalfDay = true;
-                attendance.status = 'Half-Day';
-            } else {
-                // If it went back under limit (unlikely with approval addition, but logic completeness)
-                if (attendance.status === 'Half-Day') {
-                    // Check if it should revert?
-                    // Typically strictly adding permission moves towards Half-Day, doesn't revert it unless revoked.
-                    // We leave as is.
-                }
-            }
-            await attendance.save();
         }
+
+        // Recalculate Total Permission
+        const allPermissions = await Permission.find({
+            user: permission.user,
+            date: { $gte: startOfDay, $lte: endOfDay },
+            status: 'Approved'
+        });
+
+        const totalShortPermission = allPermissions.reduce((acc, curr) => acc + curr.durationMinutes, 0);
+
+        attendance.totalPermissionMinutes =
+            (attendance.lateMinutes || 0) +
+            (attendance.lunchExceededMinutes || 0) +
+            totalShortPermission;
+
+        // Note: We don't change status to Half-Day here based on 3hr limit because
+        // we already enforce Max 3hr per permission.
+        // If they take multiple permissions > 3hrs total, then yes, loop above logic check:
+
+        if (attendance.totalPermissionMinutes > 180) {
+            attendance.isHalfDay = true;
+            attendance.status = 'Half-Day';
+        }
+
+        await attendance.save();
     }
 
     res.json(permission);

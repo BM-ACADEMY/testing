@@ -38,6 +38,17 @@ const ApplyPermissionModal = ({ visible, onClose, onSuccess }) => {
             return;
         }
 
+        // Calculate duration
+        const start = new Date(`1970-01-01T${times.start}:00`);
+        const end = new Date(`1970-01-01T${times.end}:00`);
+        const durationMinutes = (end - start) / 60000;
+
+        if (durationMinutes > 180) {
+            setError('Permission cannot exceed 3 hours. Please apply for Half-Day or Leave.');
+            setLoading(false);
+            return;
+        }
+
         try {
             await api.post('/permissions', {
                 date,

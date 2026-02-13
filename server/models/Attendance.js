@@ -24,6 +24,7 @@ const attendanceSchema = new mongoose.Schema({
         default: 'Absent'
     },
     lopDays: { type: Number, default: 0 }, // 0, 0.5, 1, 2
+    overrideReason: { type: String } // Reason for overriding approved leave
 }, { timestamps: true });
 
 // Compound index just in case

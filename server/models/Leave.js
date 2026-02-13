@@ -9,6 +9,7 @@ const leaveSchema = new mongoose.Schema({
     status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     lopDays: { type: Number, default: 0 }, // Calculated after approval
+    overrideReason: { type: String }, // Reason for coming to work despite approved leave
 }, { timestamps: true });
 
 module.exports = mongoose.model('Leave', leaveSchema);

@@ -91,11 +91,70 @@ const updateLeaveStatus = asyncHandler(async (req, res) => {
     }
 
     await leave.save();
+
+    // If Approved, create/update Attendance records
+    if (status === 'Approved') {
+        let current = dayjs(leave.startDate);
+        const end = dayjs(leave.endDate);
+
+        while (current.isBefore(end) || current.isSame(end, 'day')) {
+            // Exclude Sunday (0)
+            if (current.day() !== 0) {
+                const date = current.toDate();
+                const startOfDay = new Date(date);
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date(date);
+                endOfDay.setHours(23, 59, 59, 999);
+
+                // Upsert Attendance Record
+                await Attendance.findOneAndUpdate(
+                    {
+                        user: leave.user,
+                        date: { $gte: startOfDay, $lte: endOfDay }
+                    },
+                    {
+                        $set: {
+                            status: 'On-Leave',
+                            user: leave.user,
+                            date: startOfDay // Ensure date is set for new records
+                        }
+                    },
+                    { upsert: true, new: true }
+                );
+            }
+            current = current.add(1, 'day');
+        }
+    }
+
     res.json(leave);
+});
+
+// @desc    Check if user has leave today
+// @route   GET /api/leaves/check-today
+// @access  Private (Employee)
+const checkLeaveToday = asyncHandler(async (req, res) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const leave = await Leave.findOne({
+        user: req.user.id,
+        startDate: { $lte: endOfDay },
+        endDate: { $gte: today },
+        status: 'Approved'
+    });
+
+    if (leave) {
+        res.json({ hasLeave: true, leave });
+    } else {
+        res.json({ hasLeave: false });
+    }
 });
 
 module.exports = {
     applyLeave,
     getLeaves,
-    updateLeaveStatus
+    updateLeaveStatus,
+    checkLeaveToday
 };

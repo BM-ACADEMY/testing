@@ -108,6 +108,7 @@ const App = () => {
             <Route path="analytics" element={<CEODashboard />} />
             <Route path="shifts" element={<Shifts />} />
             <Route path="attendance" element={<HRAttendance />} />
+
             <Route path="employee/:userId/analytics" element={<PermissionAnalytics />} />
             <Route path="requests" element={<Requests />} />
             <Route path="holidays" element={<Holidays />} />

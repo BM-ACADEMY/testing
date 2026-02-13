@@ -85,7 +85,42 @@ const markAttendance = asyncHandler(async (req, res) => {
         });
     } else {
         // --- UPDATE EXISTING RECORD ---
-        if (type === 'logout') {
+
+        // Check if this is a leave day and user hasn't confirmed override
+        if (type === 'login' && attendance.status === 'On-Leave' && !req.body.overrideLeave) {
+            res.status(403);
+            throw new Error('You have approved leave today. Please confirm to override.');
+        }
+
+        // If overriding leave, update the record and also update the leave record
+        if (type === 'login' && attendance.status === 'On-Leave' && req.body.overrideLeave) {
+            const lateMinutes = calculateLateMinutes(now, shift.loginTime, shift.graceTime);
+            attendance.loginTime = now;
+            attendance.lateMinutes = lateMinutes;
+            attendance.status = 'Present';
+            attendance.shiftName = shift.name;
+            attendance.totalPermissionMinutes = lateMinutes;
+            attendance.overrideReason = req.body.overrideReason || 'No reason provided'; // Store reason
+
+            // Also update the leave record with override reason
+            const Leave = require('../models/Leave');
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+
+            await Leave.findOneAndUpdate(
+                {
+                    user: userId,
+                    startDate: { $lte: endOfDay },
+                    endDate: { $gte: startOfDay },
+                    status: 'Approved'
+                },
+                {
+                    $set: { overrideReason: req.body.overrideReason || 'No reason provided' }
+                }
+            );
+        } else if (type === 'logout') {
             attendance.logoutTime = now;
             // TODO: Could check for early logout if needed, for now just save
         } else if (type === 'lunchOut') {

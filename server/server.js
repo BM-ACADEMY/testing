@@ -41,6 +41,7 @@ app.use('/api/profile', require('./routes/profileRoutes'));
 app.use('/api/leaves', require('./routes/leaveRoutes'));
 app.use('/api/permissions', require('./routes/permissionRoutes'));
 app.use('/api/holidays', require('./routes/holidayRoutes'));
+app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 // app.use('/api/reports', require('./routes/reportRoutes'));
 
 // Socket.io

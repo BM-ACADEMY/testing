@@ -26,7 +26,20 @@ const getUsers = asyncHandler(async (req, res) => {
 // @access  Private (CEO/HR)
 const createUser = asyncHandler(async (req, res) => {
     console.log('createUser body:', req.body);
-    const { name, email, password, role, shiftId } = req.body;
+    const {
+        name,
+        email,
+        password,
+        role,
+        shiftId,
+        joiningDate,
+        designation,
+        address,
+        bloodGroup,
+        idNumber,
+        phoneNumber,
+        dob
+    } = req.body;
 
     // 1. Validate Requestor Role
     const requestorRole = req.user.role;
@@ -68,16 +81,19 @@ const createUser = asyncHandler(async (req, res) => {
         email,
         password: hashedPassword,
         role,
-        shift: shiftId // Optional for HR, required for Emp?
+        shift: shiftId, // Optional for HR, required for Emp?
+        joiningDate: joiningDate || Date.now(),
+        designation,
+        address,
+        bloodGroup,
+        idNumber,
+        phoneNumber,
+        dob
     });
 
     if (user) {
-        res.status(201).json({
-            _id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-        });
+        const populatedUser = await User.findById(user._id).populate('shift').select('-password');
+        res.status(201).json(populatedUser);
     } else {
         res.status(400);
         throw new Error('Invalid user data');
@@ -124,7 +140,7 @@ const updateUser = asyncHandler(async (req, res) => {
 
     const updatedUser = await User.findByIdAndUpdate(req.params.id, updates, {
         new: true,
-    }).select('-password');
+    }).populate('shift').select('-password');
 
     res.json(updatedUser);
 });

@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { io } from 'socket.io-client';
 import ApplyLeaveModal from '../../components/modals/ApplyLeaveModal';
 import ApplyPermissionModal from '../../components/modals/ApplyPermissionModal';
+import LeaveOverrideModal from '../../components/modals/LeaveOverrideModal';
 
 
 const EmployeeDashboard = () => {
@@ -28,10 +29,13 @@ const EmployeeDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true); // Added to track initial data fetch
     const [attendance, setAttendance] = useState(null);
+    const [holiday, setHoliday] = useState(null); // Holiday state
     const [todayActivity, setTodayActivity] = useState([]);
     const [stats, setStats] = useState({ presents: 0, lates: 0, absents: 0, halfDays: 0, lopDays: 0 });
     const [leaveModalVisible, setLeaveModalVisible] = useState(false);
     const [permissionModalVisible, setPermissionModalVisible] = useState(false);
+    const [leaveOverrideModalVisible, setLeaveOverrideModalVisible] = useState(false);
+    const [todayLeaveDetails, setTodayLeaveDetails] = useState(null);
 
     // Add missing recentRequests state and fetches from previous implementation
     const [recentRequests, setRecentRequests] = useState([]);
@@ -91,6 +95,18 @@ const EmployeeDashboard = () => {
         }
     };
 
+    const fetchHoliday = async () => {
+        try {
+            const today = dayjs().format('YYYY-MM-DD');
+            const { data } = await api.get(`/holidays/check/${today}`);
+            if (data.isHoliday) {
+                setHoliday(data.holiday);
+            }
+        } catch (error) {
+            console.error("Error fetching holiday:", error);
+        }
+    };
+
     const updateTimeline = (data) => {
         if (!data) return;
         const items = [];
@@ -139,6 +155,7 @@ const EmployeeDashboard = () => {
         fetchTodayAttendance();
         fetchStats();
         fetchRequests();
+        fetchHoliday();
 
         // Request Notification Permission on mount
         if ('Notification' in window && Notification.permission !== 'granted') {
@@ -223,6 +240,24 @@ const EmployeeDashboard = () => {
         setLoading(true);
         const backendType = type === 'checkIn' ? 'login' : (type === 'checkOut' ? 'logout' : type);
 
+        // Check if user has leave today before allowing check-in
+        if (type === 'checkIn') {
+            try {
+                const { data: leaveCheck } = await api.get('/leaves/check-today');
+
+                if (leaveCheck.hasLeave) {
+                    // Store leave details and show modal
+                    setTodayLeaveDetails(leaveCheck.leave);
+                    setLeaveOverrideModalVisible(true);
+                    setLoading(false);
+                    return; // Wait for modal confirmation
+                }
+            } catch (error) {
+                console.error('Error checking leave:', error);
+            }
+        }
+
+        // Normal attendance marking (not on leave)
         try {
             const { data } = await api.post('/attendance/mark', { type: backendType });
             // Replaced message.success with console or custom toast logic (omitted for brevity, assume native alert or no-op)
@@ -233,6 +268,25 @@ const EmployeeDashboard = () => {
         } catch (error) {
             console.error(error);
             // message.error...
+        }
+        setLoading(false);
+    };
+
+    const handleLeaveOverrideConfirm = async (reason) => {
+        setLoading(true);
+        try {
+            const { data } = await api.post('/attendance/mark', {
+                type: 'login',
+                overrideLeave: true,
+                overrideReason: reason
+            });
+            setAttendance(data);
+            updateTimeline(data);
+            fetchStats();
+            setLeaveOverrideModalVisible(false);
+            setTodayLeaveDetails(null);
+        } catch (error) {
+            console.error(error);
         }
         setLoading(false);
     };
@@ -450,51 +504,64 @@ const EmployeeDashboard = () => {
                                 <div className="text-center py-4 text-blue-600">Processing...</div>
                             ) : (
                                 <>
-                                    {!attendance?.loginTime && (
-                                        <button
-                                            onClick={() => handleMarkAttendance('checkIn')}
-                                            disabled={!isShiftStarted()}
-                                            className={`w-full py-3.5 rounded-xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-2 ${isShiftStarted()
-                                                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-95'
-                                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                                }`}
-                                        >
-                                            <Clock size={20} />
-                                            {isShiftStarted() ? 'Check In' : `Check In starts at ${user?.shift?.loginTime || 'Unknown'}`}
-                                        </button>
-                                    )}
-
-                                    {attendance?.loginTime && !attendance?.logoutTime && (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {!(attendance?.lunchOut || attendance?.lunchOutTime) ? (
-                                                <button
-                                                    onClick={() => handleMarkAttendance('lunchOut')}
-                                                    className="w-full py-3 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
-                                                >
-                                                    <Coffee size={18} /> Lunch
-                                                </button>
-                                            ) : !(attendance?.lunchIn || attendance?.lunchInTime) ? (
-                                                <button
-                                                    onClick={() => handleMarkAttendance('lunchIn')}
-                                                    className="w-full py-3 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
-                                                >
-                                                    <Coffee size={18} /> Return
-                                                </button>
-                                            ) : <div className="hidden"></div>}
-
-                                            <button
-                                                onClick={() => handleMarkAttendance('checkOut')}
-                                                className="col-span-1 w-full py-3 bg-white text-red-600 border border-red-100 hover:bg-red-50 rounded-xl font-bold shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
-                                            >
-                                                <LogOut size={18} /> Check Out
-                                            </button>
+                                    {holiday ? (
+                                        <div className="p-6 bg-purple-50 rounded-xl text-center border border-purple-100">
+                                            <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <Calendar size={32} className="text-purple-600" />
+                                            </div>
+                                            <h3 className="text-lg font-bold text-gray-900 mb-1">Office Official Leave</h3>
+                                            <p className="text-purple-700 font-medium">{holiday.name}</p>
+                                            <p className="text-sm text-gray-500 mt-2">Attendance marking is disabled for today.</p>
                                         </div>
-                                    )}
+                                    ) : (
+                                        <>
+                                            {!attendance?.loginTime && (
+                                                <button
+                                                    onClick={() => handleMarkAttendance('checkIn')}
+                                                    disabled={!isShiftStarted()}
+                                                    className={`w-full py-3.5 rounded-xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-2 ${isShiftStarted()
+                                                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 active:scale-95'
+                                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                        }`}
+                                                >
+                                                    <Clock size={20} />
+                                                    {isShiftStarted() ? 'Check In' : `Check In starts at ${user?.shift?.loginTime || 'Unknown'}`}
+                                                </button>
+                                            )}
 
-                                    {attendance?.logoutTime && (
-                                        <div className="p-4 bg-green-50 text-green-700 rounded-xl text-center font-bold border border-green-100 flex items-center justify-center gap-2">
-                                            <CheckCircle size={20} /> Shift Completed
-                                        </div>
+                                            {attendance?.loginTime && !attendance?.logoutTime && (
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {!(attendance?.lunchOut || attendance?.lunchOutTime) ? (
+                                                        <button
+                                                            onClick={() => handleMarkAttendance('lunchOut')}
+                                                            className="w-full py-3 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                                                        >
+                                                            <Coffee size={18} /> Lunch
+                                                        </button>
+                                                    ) : !(attendance?.lunchIn || attendance?.lunchInTime) ? (
+                                                        <button
+                                                            onClick={() => handleMarkAttendance('lunchIn')}
+                                                            className="w-full py-3 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                                                        >
+                                                            <Coffee size={18} /> Return
+                                                        </button>
+                                                    ) : <div className="hidden"></div>}
+
+                                                    <button
+                                                        onClick={() => handleMarkAttendance('checkOut')}
+                                                        className="col-span-1 w-full py-3 bg-white text-red-600 border border-red-100 hover:bg-red-50 rounded-xl font-bold shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+                                                    >
+                                                        <LogOut size={18} /> Check Out
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {attendance?.logoutTime && (
+                                                <div className="p-4 bg-green-50 text-green-700 rounded-xl text-center font-bold border border-green-100 flex items-center justify-center gap-2">
+                                                    <CheckCircle size={20} /> Shift Completed
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </>
                             )}
@@ -545,6 +612,17 @@ const EmployeeDashboard = () => {
                 visible={permissionModalVisible}
                 onClose={() => setPermissionModalVisible(false)}
                 onSuccess={() => { fetchStats(); fetchRequests(); }}
+            />
+
+            <LeaveOverrideModal
+                visible={leaveOverrideModalVisible}
+                onClose={() => {
+                    setLeaveOverrideModalVisible(false);
+                    setTodayLeaveDetails(null);
+                    setLoading(false);
+                }}
+                onConfirm={handleLeaveOverrideConfirm}
+                leaveDetails={todayLeaveDetails}
             />
         </motion.div>
     );

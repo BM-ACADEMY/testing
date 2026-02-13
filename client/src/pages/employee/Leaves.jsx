@@ -104,13 +104,14 @@ const Leaves = () => {
                                     <th className="px-6 py-4">Date / Duration</th>
                                     <th className="px-6 py-4">Reason</th>
                                     <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Came to Work Reason</th>
                                     <th className="px-6 py-4">Applied On</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {(activeTab === 'leaves' ? leaves : permissions).length === 0 ? (
                                     <tr>
-                                        <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
                                             No {activeTab} records found.
                                         </td>
                                     </tr>
@@ -137,6 +138,18 @@ const Leaves = () => {
                                                 <StatusBadge status={item.status} />
                                                 {item.adminComment && (
                                                     <p className="text-xs text-gray-500 mt-1">Note: {item.adminComment}</p>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm max-w-[200px]">
+                                                {item.overrideReason ? (
+                                                    <div className="flex items-start gap-2">
+                                                        <span className="text-orange-600 shrink-0">💬</span>
+                                                        <span className="text-gray-700 italic text-xs line-clamp-2" title={item.overrideReason}>
+                                                            {item.overrideReason}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400">-</span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-500">

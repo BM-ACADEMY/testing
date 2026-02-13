@@ -46,6 +46,7 @@ const MainLayout = () => {
                 { key: 'shifts', icon: <Calendar size={20} />, label: 'Shifts', path: '/hr/shifts' },
                 { key: 'holidays', icon: <Calendar size={20} />, label: 'Holidays', path: '/hr/holidays' },
                 { key: 'attendance', icon: <FileText size={20} />, label: 'Attendance', path: '/hr/attendance' },
+
                 { key: 'reports', icon: <FileText size={20} />, label: 'Reports', path: '/hr/reports' }
             );
         } else if (role === 'CEO') {
@@ -55,6 +56,7 @@ const MainLayout = () => {
                 { key: 'shifts', icon: <Calendar size={20} />, label: 'Shifts', path: '/ceo/shifts' },
                 { key: 'holidays', icon: <Calendar size={20} />, label: 'Holidays', path: '/ceo/holidays' },
                 { key: 'attendance', icon: <FileText size={20} />, label: 'Attendance', path: '/ceo/attendance' },
+
                 { key: 'analytics', icon: <LayoutDashboard size={20} />, label: 'Analytics', path: '/ceo/analytics' },
             );
         } else {

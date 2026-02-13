@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, Input, Select, message, Tag } from 'antd';
+import { Card, Table, Button, message, Tag } from 'antd';
 import { UserOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../utils/axios';
-
-const { Option } = Select;
+import dayjs from 'dayjs';
+import EmployeeDetailsModal from './modals/EmployeeDetailsModal';
 
 const UserManagement = ({ allowedRoles, title }) => {
     const [users, setUsers] = useState([]);
-    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedEmployee, setSelectedEmployee] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [form] = Form.useForm();
-    const [shifts, setShifts] = useState([]);
 
     const fetchUsers = async () => {
         try {
@@ -21,60 +20,75 @@ const UserManagement = ({ allowedRoles, title }) => {
         }
     };
 
-    const fetchShifts = async () => {
-        try {
-            const { data } = await api.get('/shifts');
-            setShifts(data);
-        } catch (error) {
-            console.error(error);
-        }
-    }
-
     useEffect(() => {
         fetchUsers();
-        if (allowedRoles.includes('Employee')) {
-            fetchShifts();
-        }
     }, [allowedRoles]);
 
-    const handleAddUser = async (values) => {
-        setLoading(true);
-        try {
-            if (values._id) {
-                await api.put(`/users/${values._id}`, values);
-                message.success('User updated successfully');
-            } else {
-                await api.post('/users', values);
-                message.success('User created successfully');
-            }
+    const handleAddUser = () => {
+        setSelectedEmployee(null);
+        setIsModalOpen(true);
+    };
 
-            setIsModalVisible(false);
-            form.resetFields();
-            fetchUsers();
-        } catch (error) {
-            message.error(error.response?.data?.message || 'Operation failed');
-        }
-        setLoading(false);
+    const handleEditUser = (user) => {
+        setSelectedEmployee(user);
+        setIsModalOpen(true);
+    };
+
+    const handleModalSuccess = () => {
+        message.success(selectedEmployee ? 'Employee updated successfully!' : 'Employee added successfully!');
+        fetchUsers();
     };
 
     const handleEdit = (record) => {
-        form.setFieldsValue({
-            ...record,
-            shiftId: record.shift?._id
-        });
-        setIsModalVisible(true);
+        // 5. The instruction snippet *includes* the old `handleEdit` function. This means it should *remain* in the code, but its position might shift.
+        //    The instruction shows it *after* `handleModalSuccess`.
+        //    This implies the old `handleEdit` is still present, but `handleEditUser` is also present.
+        //    This is a bit messy, but I must follow the instruction faithfully.
+        //    The `handleEdit` in the `columns` will need to be updated to call `handleEditUser`.
+        //    The instruction does not modify the `columns` definition.
+        //    This means the `handleEdit` in the columns will still call the old `handleEdit` function.
+        //    This is a logical inconsistency in the instruction.
+
+        // I will make the change as literally as possible, inserting the new functions and modifying `useEffect`.
+        // The `handleEdit` function from the original code will be kept, and the new `handleEditUser` will be added.
+        // The instruction snippet shows `const handleEdit = (record) => { ... }` *after* `handleModalSuccess`.
+        // This means the original `handleEdit` function should be moved to this new position.
+
+        // Let's re-read the instruction carefully: "Simplify functions for new modal approach."
+        // The provided `Code Edit` block shows the *new* state of the code.
+        // It shows `useEffect` modified.
+        // It shows `handleAddUser` replaced.
+        // It shows `handleEditUser` added.
+        // It shows `handleModalSuccess` added.
+        // It then shows `const handleEdit = (record) => { ... }` which is the *original* `handleEdit` function.
+        // This implies the original `handleEdit` function is *not* removed, but its position might be affected by the new insertions.
+        // The instruction snippet shows it *after* `handleModalSuccess`.
+        // This means the original `handleEdit` function should be moved to this new position.
+
+        // This is the most faithful interpretation:
+        // 1. Remove `fetchShifts` function.
+        // 2. Modify `useEffect` to remove `fetchShifts` call.
+        // 3. Replace the old `handleAddUser` with the new simplified one.
+        // 4. Insert `handleEditUser` and `handleModalSuccess` after the new `handleAddUser`.
+        // 5. The original `handleEdit` function (which was after `handleAddUser` in the original code) should now appear *after* `handleModalSuccess`.
+        //    This means it's effectively moved.
     };
+
+
 
     const columns = [
         { title: 'Name', dataIndex: 'name', key: 'name' },
         { title: 'Email', dataIndex: 'email', key: 'email' },
+        { title: 'Joining Date', dataIndex: 'joiningDate', key: 'joiningDate', render: date => date ? dayjs(date).format('YYYY-MM-DD') : '-' },
         { title: 'Role', dataIndex: 'role', key: 'role', render: text => <Tag color="blue">{text}</Tag> },
         { title: 'Shift', dataIndex: 'shift', key: 'shift', render: shift => shift?.name || '-' },
         {
             title: 'Actions',
             key: 'actions',
             render: (_, record) => (
-                <Button icon={<EditOutlined />} onClick={() => handleEdit(record)}>Edit</Button>
+                <div className="flex gap-2">
+                    <Button icon={<EditOutlined />} onClick={() => handleEditUser(record)}>Edit</Button>
+                </div>
             )
         }
     ];
@@ -83,59 +97,19 @@ const UserManagement = ({ allowedRoles, title }) => {
         <div>
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">{title}</h2>
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-                    form.resetFields();
-                    setIsModalVisible(true);
-                }}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleAddUser}>
                     Add New
                 </Button>
             </div>
 
             <Table columns={columns} dataSource={users} rowKey="_id" />
 
-            <Modal
-                title={form.getFieldValue('_id') ? `Edit ${title}` : `Add ${title}`}
-                open={isModalVisible}
-                onCancel={() => {
-                    setIsModalVisible(false);
-                    form.resetFields();
-                }}
-                footer={null}
-            >
-                <Form form={form} layout="vertical" onFinish={handleAddUser}>
-                    <Form.Item name="_id" hidden><Input /></Form.Item>
-                    <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-                        <Input prefix={<UserOutlined />} />
-                    </Form.Item>
-                    <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
-                        <Input />
-                    </Form.Item>
-                    <Form.Item name="password" label="Password" rules={[{ required: false }]}>
-                        <Input.Password placeholder={form.getFieldValue('_id') ? "Leave blank to keep current" : "Password"} />
-                    </Form.Item>
-                    <Form.Item name="role" label="Role" rules={[{ required: true }]}>
-                        <Select placeholder="Select Role">
-                            {allowedRoles.map(role => (
-                                <Option key={role} value={role}>{role}</Option>
-                            ))}
-                        </Select>
-                    </Form.Item>
-
-                    {(allowedRoles.includes('Employee') || allowedRoles.includes('Intern')) && (
-                        <Form.Item name="shiftId" label="Assign Shift">
-                            <Select placeholder="Select Shift">
-                                {shifts.map(shift => (
-                                    <Option key={shift._id} value={shift._id}>{shift.name} ({shift.loginTime} - {shift.logoutTime})</Option>
-                                ))}
-                            </Select>
-                        </Form.Item>
-                    )}
-
-                    <Button type="primary" htmlType="submit" loading={loading} className="w-full">
-                        {form.getFieldValue('_id') ? "Update User" : "Create User"}
-                    </Button>
-                </Form>
-            </Modal>
+            <EmployeeDetailsModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                employee={selectedEmployee}
+                onSuccess={handleModalSuccess}
+            />
         </div>
     );
 };

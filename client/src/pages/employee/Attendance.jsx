@@ -5,13 +5,51 @@ import { Calendar, Clock, AlertCircle } from 'lucide-react';
 import dayjs from 'dayjs';
 import { formatLateTime, formatDuration } from '../../utils/timeFormat';
 
+import { io } from 'socket.io-client';
+import { useAuth } from '../../context/AuthContext';
+
 const Attendance = () => {
+    const { user } = useAuth();
     const [attendance, setAttendance] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         fetchAttendance();
     }, []);
+
+    // Socket.io Connection
+    useEffect(() => {
+        if (!user) return;
+
+        const socket = io(import.meta.env.VITE_API_URL, {
+            transports: ['websocket', 'polling'],
+            reconnectionAttempts: 5,
+        });
+
+        socket.on('attendanceUpdate', (updatedRecord) => {
+            // Check if update is for this user
+            const updatedUserId = updatedRecord.user._id || updatedRecord.user;
+
+            if (updatedUserId === user._id) {
+                setAttendance((prev) => {
+                    const index = prev.findIndex(item => item._id === updatedRecord._id);
+                    if (index !== -1) {
+                        // Update existing
+                        const newAttendance = [...prev];
+                        newAttendance[index] = updatedRecord;
+                        return newAttendance;
+                    } else {
+                        // Add new (prepend)
+                        return [updatedRecord, ...prev];
+                    }
+                });
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [user]);
 
     const fetchAttendance = async () => {
         try {
@@ -65,12 +103,13 @@ const Attendance = () => {
                                 <th className="px-6 py-4">Lunch In</th>
                                 <th className="px-6 py-4">Logout</th>
                                 <th className="px-6 py-4">Total Late Time</th>
+                                <th className="px-6 py-4">Came to Work Reason</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {attendance.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                                         No attendance records found.
                                     </td>
                                 </tr>
@@ -101,6 +140,20 @@ const Attendance = () => {
                                         <td className="px-6 py-4 text-sm">
                                             {record.totalPermissionMinutes > 0 ? (
                                                 <span className="text-red-600 font-medium">{formatDuration(record.totalPermissionMinutes)}</span>
+                                            ) : (
+                                                <span className="text-gray-400">-</span>
+                                            )}
+                                        </td>
+
+                                        {/* Override Reason */}
+                                        <td className="px-6 py-4 text-sm max-w-[250px]">
+                                            {record.overrideReason ? (
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-orange-600 shrink-0">💬</span>
+                                                    <span className="text-gray-700 italic line-clamp-2" title={record.overrideReason}>
+                                                        {record.overrideReason}
+                                                    </span>
+                                                </div>
                                             ) : (
                                                 <span className="text-gray-400">-</span>
                                             )}
