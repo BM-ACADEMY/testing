@@ -22,7 +22,7 @@ const ProductBottleScroll = ({
     const smoothFrame = useSpring(currentFrame, { stiffness: 300, damping: 30, restDelta: 0.001 });
 
     // Preload images
-    
+
     useEffect(() => {
         let isMounted = true;
         const loadedImages = [];
@@ -45,6 +45,31 @@ const ProductBottleScroll = ({
             img.onload = () => {
                 loadCount++;
                 loadedImages[index - 1] = img;
+
+                // Draw the first frame immediately to avoid black screen
+                if (index === 1 && canvasRef.current) {
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        const canvasRatio = canvas.width / canvas.height;
+                        const imgRatio = img.width / img.height;
+                        let drawWidth, drawHeight, offsetX, offsetY;
+
+                        if (canvasRatio > imgRatio) {
+                            drawWidth = canvas.width;
+                            drawHeight = img.height * (canvas.width / img.width);
+                            offsetX = 0;
+                            offsetY = (canvas.height - drawHeight) / 2;
+                        } else {
+                            drawHeight = canvas.height;
+                            drawWidth = img.width * (canvas.height / img.height);
+                            offsetX = (canvas.width - drawWidth) / 2;
+                            offsetY = 0;
+                        }
+                        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+                    }
+                }
+
                 if (index < frameCount) {
                     preloadNext(index + 1);
                 } else if (isMounted) {
