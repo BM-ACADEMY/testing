@@ -22,6 +22,7 @@ const ProductBottleScroll = ({
     const smoothFrame = useSpring(currentFrame, { stiffness: 300, damping: 30, restDelta: 0.001 });
 
     // Preload images
+    
     useEffect(() => {
         let isMounted = true;
         const loadedImages = [];
